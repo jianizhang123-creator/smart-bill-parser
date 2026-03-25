@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>Smart Bill Parser - 流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            background: #f7f8fa;
+            color: #1f2329;
+        }
+        h1 {
+            text-align: center;
+            font-size: 28px;
+            margin-bottom: 40px;
+        }
+        h2 {
+            font-size: 20px;
+            margin-top: 48px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #3370ff;
+        }
+        .diagram-container {
+            background: #fff;
+            border-radius: 8px;
+            padding: 24px;
+            margin: 16px 0 32px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+            overflow-x: auto;
+        }
+        .note {
+            background: #fff8e6;
+            border-left: 4px solid #f5a623;
+            padding: 12px 16px;
+            margin: 12px 0;
+            border-radius: 0 4px 4px 0;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Smart Bill Parser - 流程图</h1>
+
+    <h2>一、总体流程</h2>
+    <div class="diagram-container">
+        <pre class="mermaid">
+flowchart TD
+    Start([用户触发账单导入]) --> Import[选择文件导入 / 邮箱导入]
+    Import --> FileOK[文件添加成功]
+    FileOK --> ScenarioCheck{判断当前场景}
+
+    ScenarioCheck -->|"新手引导阶段 或\n无账单且只有一套分类方案"| S1["情况一：新手/无账单"]
+    ScenarioCheck -->|"已有账单 或\n已有多于一套分类方案"| S2["情况二：已有账单/多套分类"]
+
+    S1 --> HasCat1{账单文件是否\n有分类信息？}
+    HasCat1 -->|无分类| Parse1[直接解析账单\n进度条按真实进度走]
+    HasCat1 -->|有分类| MatchFlow1["进入匹配流程\n（详见第二节）"]
+
+    MatchFlow1 --> MatchResult1{全部匹配成功？}
+    MatchResult1 -->|是| DirectCat1["所有账单直接归类\n不需要AI识别"]
+    MatchResult1 -->|否| Popup1["弹窗询问用户\n（详见第三节）"]
+
+    S2 --> BookAssign["账本分配\n（详见第五节）"]
+    BookAssign --> HasCat2{账单文件是否\n有分类信息？}
+    HasCat2 -->|无分类| Parse2[直接解析账单\n进度条按真实进度走]
+    HasCat2 -->|有分类| MatchFlow2["进入匹配流程\n（详见第二节）"]
+
+    MatchFlow2 --> MatchResult2{全部匹配成功？}
+    MatchResult2 -->|是| DirectCat2["所有账单直接归类\n不需要AI识别"]
+    MatchResult2 -->|否| Popup2["弹窗询问用户\n（详见第四节）"]
+
+    Parse1 --> Done([导入完成])
+    DirectCat1 --> Done
+    Popup1 --> Done
+    Parse2 --> Done
+    DirectCat2 --> Done
+    Popup2 --> Done
+        </pre>
+    </div>
+
+    <h2>二、匹配逻辑（情况一 & 情况二共用）</h2>
+    <div class="diagram-container">
+        <pre class="mermaid">
+flowchart TD
+    StartMatch([开始匹配：遍历账单中每条分类]) --> ColCheck{账单分类有几列？}
+
+    ColCheck -->|只有一列分类| OneCol["取该分类名称"]
+    ColCheck -->|有两列分类| TwoCol["取一级分类 + 二级分类名称"]
+
+    OneCol --> Exact1{"Step 1 精准匹配\n名称 = 已有一级分类名 或 二级分类名\n且 direction 一致？"}
+    TwoCol --> Exact2{"Step 1 精准匹配\n一级名 + 二级名都与已有分类一致\n且 direction 一致？"}
+
+    Exact1 -->|匹配成功| MatchOK([该条分类匹配成功\n归类到已有分类])
+    Exact2 -->|匹配成功| MatchOK
+
+    Exact1 -->|匹配失败| Syn1{"Step 2 同义词匹配\n命中支付宝同义词库？"}
+    Exact2 -->|匹配失败| Syn2{"Step 2 同义词匹配\n命中支付宝同义词库？"}
+
+    Syn1 -->|命中| MatchOK
+    Syn2 -->|命中| MatchOK
+
+    Syn1 -->|未命中| MatchFail([该条分类匹配失败])
+    Syn2 -->|未命中| MatchFail
+
+    MatchOK --> Next{还有下一条分类？}
+    MatchFail --> Next
+
+    Next -->|是| StartMatch
+    Next -->|否| FinalCheck{所有分类都匹配成功？}
+
+    FinalCheck -->|是| AllPass([全部匹配成功])
+    FinalCheck -->|否| NotAllPass([未全部匹配成功\n进入弹窗处理])
+        </pre>
+    </div>
+
+    <h2>三、情况一弹窗处理（新手/无账单）</h2>
+    <div class="note">弹窗不可下拉或点击暗处关闭，必须点击确认。默认选中"使用已有分类智能识别"。</div>
+    <div class="diagram-container">
+        <pre class="mermaid">
+flowchart TD
+    Popup(["弹窗：如何处理不匹配的分类？"]) --> C1["选项1：使用已有分类智能识别"]
+    Popup --> C2["选项2：将账单分类\n增加到现有分类列表中"]
+    Popup --> C3["选项3：用账单分类\n完全替换已有分类"]
+
+    C1 --> C1R["能匹配的账单 → 直接归类\n不能匹配的账单 → AI识别"]
+
+    C2 --> C2R["不能匹配的分类新增到分类方案末尾\n• 一列 → 一级分类\n• 两列 → 一级-二级\n• 图标取首字，区分支出/收入\n• 导入成功后才真正创建"]
+    C2R --> Toast1["Toast: 导入成功，新增分类x个"]
+
+    C3 --> Confirm{"二次确认弹窗\n当前x个分类将被完全移除\n新增y个分类，不可撤销"}
+    Confirm -->|取消| Popup
+    Confirm -->|确认| ReplaceLogic{账单分类类型？}
+
+    ReplaceLogic -->|只有支出| R1["移除所有支出分类\n替换为账单支出分类\n保留其他支出一级分类\n收入不变"]
+    ReplaceLogic -->|只有收入| R2["移除所有收入分类\n替换为账单收入分类\n保留其他收入一级分类\n支出不变"]
+    ReplaceLogic -->|支出+收入| R3["移除所有分类\n替换为账单全部分类\n保留其他支出和收入一级分类"]
+
+    C1R --> Done([导入完成])
+    Toast1 --> Done
+    R1 --> Done
+    R2 --> Done
+    R3 --> Done
+        </pre>
+    </div>
+
+    <h2>四、情况二弹窗处理（已有账单/多套分类方案）</h2>
+    <div class="note">情况二比情况一少了"完全替换已有分类"选项。</div>
+    <div class="diagram-container">
+        <pre class="mermaid">
+flowchart TD
+    Popup2(["弹窗：如何处理不匹配的分类？"]) --> C2A["选项1：使用已有分类智能识别"]
+    Popup2 --> C2B["选项2：将账单分类\n增加到现有分类列表中"]
+
+    C2A --> C2AR["能匹配的账单 → 直接归类\n不能匹配的账单 → AI识别"]
+
+    C2B --> C2BR["不能匹配的分类新增到对应分类方案末尾\n• 一列 → 一级分类\n• 两列 → 一级-二级\n• 图标取首字，区分支出/收入\n• 导入成功后才真正创建"]
+    C2BR --> Toast2["Toast: 导入成功，新增分类x个"]
+
+    C2AR --> Done2([导入完成])
+    Toast2 --> Done2
+        </pre>
+    </div>
+
+    <h2>五、情况二 - 账本分配逻辑</h2>
+    <div class="diagram-container">
+        <pre class="mermaid">
+flowchart TD
+    StartBook([开始账本分配]) --> HasBookField{账单数据中\n有账本字段？}
+
+    HasBookField -->|否| UseMain["使用总账本当前的分类方案"]
+    HasBookField -->|是| BookMatch{账本名称与用户\n已有账本名称一样？}
+
+    BookMatch -->|是| AssignBook["该笔账单归入对应账本\n使用该账本的分类方案"]
+    BookMatch -->|否| UseMain
+
+    AssignBook --> EndBook([分配完成，进入分类匹配])
+    UseMain --> EndBook
+        </pre>
+    </div>
+
+    <h2>六、预览页手动修改账本 - 分类重匹配</h2>
+    <div class="diagram-container">
+        <pre class="mermaid">
+flowchart TD
+    Trigger([用户在预览页将账单\n从账本A改为账本B]) --> SameScheme{账本A和账本B\n使用同一套分类方案？}
+
+    SameScheme -->|是| NoAction([无需处理])
+    SameScheme -->|否| ReMatch["对该笔账单重新执行\nStep1 精准匹配 + Step2 同义词匹配"]
+
+    ReMatch --> ReMatchResult{匹配成功？}
+    ReMatchResult -->|是| SilentUpdate["静默更新该笔账单的分类\n为新方案中的匹配分类"]
+    ReMatchResult -->|否| PrevChoice{用户之前选择的处理方式？}
+
+    PrevChoice -->|使用已有分类智能识别| ReAI["对该笔账单进行AI识别"]
+    PrevChoice -->|将分类增加到现有列表| ReAdd["将不匹配的分类\n新增到新分类方案中"]
+    PrevChoice -->|完全替换已有分类| ReReplace["将不匹配的分类\n新增到新分类方案中"]
+
+    SilentUpdate --> BatchNext{批量处理\n还有下一笔？}
+    ReAI --> BatchNext
+    ReAdd --> BatchNext
+    ReReplace --> BatchNext
+
+    BatchNext -->|是| Trigger
+    BatchNext -->|否| EndRe([重匹配完成])
+        </pre>
+    </div>
+
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'default',
+            flowchart: {
+                useMaxWidth: true,
+                htmlLabels: true,
+                curve: 'basis'
+            },
+            securityLevel: 'loose'
+        });
+    </script>
+</body>
+</html>

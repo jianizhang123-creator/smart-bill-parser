@@ -1,0 +1,1477 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smart Bill Parser - 账单导入分类识别</title>
+<style>
+:root {
+  --primary: #007AFF;
+  --primary-light: #E8F0FE;
+  --success: #34C759;
+  --warning: #FF9500;
+  --danger: #FF3B30;
+  --bg: #F2F2F7;
+  --card: #FFFFFF;
+  --text: #1C1C1E;
+  --text2: #8E8E93;
+  --text3: #AEAEB2;
+  --border: #E5E5EA;
+  --radius: 12px;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', sans-serif;
+  background: #1a1a2e;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 24px;
+  gap: 28px;
+  color: var(--text);
+}
+
+/* ========== Control Panel ========== */
+.control-panel {
+  width: 320px;
+  background: #fff;
+  border-radius: 16px;
+  padding: 24px;
+  position: sticky;
+  top: 24px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.15);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+}
+.control-panel h2 {
+  font-size: 18px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.control-panel h2::before { content: ''; display: inline-block; width: 4px; height: 18px; background: var(--primary); border-radius: 2px; }
+.control-group { margin-bottom: 16px; }
+.control-group label {
+  display: block;
+  font-size: 13px;
+  color: var(--text2);
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+.control-group select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 14px;
+  background: var(--bg);
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238E8E93' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+}
+.btn-start {
+  width: 100%;
+  padding: 12px;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 20px;
+  transition: opacity .2s;
+}
+.btn-start:hover { opacity: 0.85; }
+.btn-start:active { opacity: 0.7; }
+
+.category-section { margin-top: 4px; }
+.category-section h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 10px;
+  color: var(--text);
+}
+.cat-direction {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text2);
+  margin: 8px 0 4px;
+  padding: 4px 8px;
+  background: var(--bg);
+  border-radius: 4px;
+  display: inline-block;
+}
+.cat-list { margin-bottom: 8px; }
+.cat-item {
+  font-size: 13px;
+  padding: 3px 0;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.cat-item .cat-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--primary-light);
+  color: var(--primary);
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.cat-item.cat-new .cat-icon { background: #FFF3E0; color: var(--warning); }
+.cat-item .cat-children { color: var(--text2); font-size: 12px; }
+.cat-item.cat-removed { text-decoration: line-through; color: var(--text3); }
+
+.legend { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
+.legend-item { font-size: 12px; color: var(--text2); margin: 2px 0; display: flex; align-items: center; gap: 6px; }
+.legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+/* ========== Phone Frame ========== */
+.phone {
+  width: 375px;
+  min-height: 780px;
+  background: #000;
+  border-radius: 48px;
+  padding: 12px;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.4);
+  position: relative;
+  flex-shrink: 0;
+}
+.phone-screen {
+  width: 100%;
+  height: 756px;
+  background: var(--bg);
+  border-radius: 38px;
+  overflow: hidden;
+  position: relative;
+}
+.phone-notch {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 120px;
+  height: 28px;
+  background: #000;
+  border-radius: 0 0 16px 16px;
+  z-index: 100;
+}
+.phone-home {
+  width: 130px;
+  height: 5px;
+  background: #fff;
+  border-radius: 3px;
+  margin: 8px auto 0;
+}
+
+/* ========== Status Bar ========== */
+.status-bar {
+  height: 48px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: 0 24px 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--bg);
+  position: relative;
+  z-index: 50;
+}
+
+/* ========== Nav Bar ========== */
+.nav-bar {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  background: var(--bg);
+  position: relative;
+  z-index: 50;
+}
+.nav-back {
+  font-size: 16px;
+  color: var(--primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+}
+.nav-title {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+/* ========== Screens ========== */
+.screen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: none;
+  flex-direction: column;
+  background: var(--bg);
+}
+.screen.active { display: flex; }
+.screen-body { flex: 1; overflow-y: auto; padding: 0 16px 16px; }
+
+/* ========== Screen: Welcome ========== */
+#screen-welcome .welcome-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  text-align: center;
+}
+.welcome-icon { font-size: 64px; margin-bottom: 20px; }
+.welcome-title { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+.welcome-desc { font-size: 14px; color: var(--text2); line-height: 1.6; }
+.welcome-hint {
+  padding: 20px 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text3);
+}
+
+/* ========== Screen: Import ========== */
+.import-section {
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+.import-section-title { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
+.file-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg);
+  border-radius: 8px;
+}
+.file-icon {
+  width: 40px;
+  height: 40px;
+  background: #E8F5E9;
+  color: var(--success);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 700;
+}
+.file-info { flex: 1; }
+.file-name { font-size: 14px; font-weight: 500; }
+.file-size { font-size: 12px; color: var(--text2); margin-top: 2px; }
+.file-check { color: var(--success); font-size: 20px; }
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  font-size: 13px;
+  border-bottom: 1px solid var(--bg);
+}
+.info-row:last-child { border: none; }
+.info-label { color: var(--text2); }
+.info-value { font-weight: 500; }
+
+.btn-bottom {
+  margin: 16px;
+  padding: 14px;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  width: calc(100% - 32px);
+  transition: opacity .2s;
+}
+.btn-bottom:hover { opacity: 0.85; }
+.btn-bottom:active { opacity: 0.7; }
+.btn-bottom:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ========== Screen: Matching ========== */
+.progress-section {
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+.progress-title { font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+.progress-bar-bg {
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+.progress-bar-fill {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 3px;
+  width: 0%;
+  transition: width 0.3s ease;
+}
+.progress-text { font-size: 12px; color: var(--text2); text-align: right; }
+
+.match-log {
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+.match-log-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.match-stats { font-size: 12px; color: var(--text2); font-weight: 400; }
+.match-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--bg);
+  animation: fadeIn 0.3s ease;
+}
+.match-item:last-child { border: none; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.match-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.match-badge.exact { background: #E8F5E9; color: #2E7D32; }
+.match-badge.synonym { background: #E3F2FD; color: #1565C0; }
+.match-badge.fail { background: #FFEBEE; color: #C62828; }
+.match-badge.ai { background: #FFF3E0; color: #E65100; }
+.match-badge.added { background: #FFF3E0; color: var(--warning); }
+.match-cat-name { font-size: 13px; font-weight: 500; flex: 1; }
+.match-target { font-size: 12px; color: var(--text2); }
+
+.match-summary {
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-top: 12px;
+  display: none;
+}
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  font-size: 14px;
+}
+.summary-label { color: var(--text2); }
+.summary-value { font-weight: 600; }
+.summary-value.success { color: var(--success); }
+.summary-value.fail { color: var(--danger); }
+
+/* ========== Screen: Preview ========== */
+.preview-summary {
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+.preview-summary-title { font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+.preview-tags { display: flex; gap: 8px; flex-wrap: wrap; }
+.preview-tag {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-weight: 500;
+}
+.preview-tag.blue { background: #E3F2FD; color: #1565C0; }
+.preview-tag.green { background: #E8F5E9; color: #2E7D32; }
+.preview-tag.orange { background: #FFF3E0; color: #E65100; }
+
+.bill-card {
+  background: var(--card);
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+.bill-item {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  gap: 10px;
+}
+.bill-cat-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.bill-cat-icon.expense { background: #FFF3E0; color: #E65100; }
+.bill-cat-icon.income { background: #E8F5E9; color: #2E7D32; }
+.bill-info { flex: 1; min-width: 0; }
+.bill-desc { font-size: 14px; font-weight: 500; }
+.bill-meta { font-size: 12px; color: var(--text2); margin-top: 2px; display: flex; gap: 8px; align-items: center; }
+.bill-amount { font-size: 15px; font-weight: 600; text-align: right; white-space: nowrap; }
+.bill-amount.expense { color: var(--text); }
+.bill-amount.income { color: var(--success); }
+
+.bill-rematch-bar {
+  padding: 10px 16px 12px;
+  background: #FFFDE7;
+  font-size: 12px;
+  color: #F57F17;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-top: 1px dashed #FFE082;
+  line-height: 1.6;
+}
+.bill-card.flash {
+  animation: cardFlash 1.2s ease;
+}
+@keyframes cardFlash {
+  0% { background: var(--card); }
+  15% { background: #FFF9C4; }
+  100% { background: var(--card); }
+}
+.rematch-change { display: inline; }
+.rematch-old {
+  text-decoration: line-through;
+  color: #BDBDBD;
+  font-weight: 500;
+}
+.rematch-arrow { color: var(--text2); margin: 0 2px; }
+.rematch-new {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.book-select {
+  font-size: 11px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--primary);
+  cursor: pointer;
+}
+
+/* ========== Modals ========== */
+.modal-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 200;
+  display: none;
+  justify-content: flex-end;
+  align-items: flex-end;
+  flex-direction: column;
+}
+.modal-overlay.active { display: flex; }
+.modal-overlay.center { justify-content: center; align-items: center; }
+
+.modal-sheet {
+  width: 100%;
+  background: var(--card);
+  border-radius: 20px 20px 0 0;
+  padding: 24px 20px;
+  max-height: 85%;
+  overflow-y: auto;
+  animation: slideUp 0.3s ease;
+}
+@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.modal-handle {
+  width: 36px;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  margin: 0 auto 16px;
+}
+.modal-title { font-size: 17px; font-weight: 700; margin-bottom: 4px; }
+.modal-subtitle { font-size: 13px; color: var(--text2); margin-bottom: 16px; line-height: 1.5; }
+
+.radio-card {
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  transition: all .2s;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.radio-card.selected {
+  border-color: var(--primary);
+  background: var(--primary-light);
+}
+.radio-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  flex-shrink: 0;
+  margin-top: 1px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all .2s;
+}
+.radio-card.selected .radio-dot {
+  border-color: var(--primary);
+  background: var(--primary);
+}
+.radio-card.selected .radio-dot::after {
+  content: '';
+  width: 8px;
+  height: 8px;
+  background: #fff;
+  border-radius: 50%;
+}
+.radio-label { font-size: 15px; font-weight: 600; margin-bottom: 2px; }
+.radio-desc { font-size: 12px; color: var(--text2); line-height: 1.5; }
+
+.modal-btn {
+  width: 100%;
+  padding: 14px;
+  border: none;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 8px;
+  transition: opacity .2s;
+}
+.modal-btn:hover { opacity: 0.85; }
+.modal-btn.primary { background: var(--primary); color: #fff; }
+.modal-btn.secondary { background: var(--bg); color: var(--text); margin-top: 8px; }
+
+/* Confirm dialog */
+.confirm-dialog {
+  width: calc(100% - 64px);
+  background: var(--card);
+  border-radius: 16px;
+  padding: 24px 20px 16px;
+  text-align: center;
+  animation: popIn 0.25s ease;
+}
+@keyframes popIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.confirm-title { font-size: 17px; font-weight: 700; margin-bottom: 8px; }
+.confirm-desc { font-size: 13px; color: var(--text2); line-height: 1.6; margin-bottom: 20px; }
+.confirm-buttons { display: flex; gap: 10px; }
+.confirm-buttons .modal-btn { flex: 1; margin-top: 0; }
+.modal-btn.danger { background: var(--danger); color: #fff; }
+
+/* ========== Toast ========== */
+.toast {
+  position: absolute;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-20px);
+  background: rgba(0,0,0,0.8);
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+  z-index: 300;
+  opacity: 0;
+  transition: all 0.3s ease;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ========== Responsive ========== */
+@media (max-width: 780px) {
+  body { flex-direction: column; align-items: center; }
+  .control-panel { width: 100%; max-width: 375px; position: static; }
+}
+</style>
+</head>
+<body>
+
+<!-- ==================== Control Panel ==================== -->
+<div class="control-panel">
+  <h2>演示控制台</h2>
+
+  <div class="control-group">
+    <label>用户状态</label>
+    <select id="sel-scenario">
+      <option value="new">情况一：新用户（新手引导 / 无账单）</option>
+      <option value="existing">情况二：老用户（有账单 / 多套方案）</option>
+    </select>
+  </div>
+
+  <div class="control-group">
+    <label>导入账单数据</label>
+    <select id="sel-bill-type">
+      <option value="noCategory">无分类信息（如微信账单）</option>
+      <option value="allMatch">有分类 — 全部匹配成功</option>
+      <option value="partialMatch" selected>有分类 — 部分不匹配</option>
+    </select>
+  </div>
+
+  <button class="btn-start" id="btn-start" onclick="startDemo()">开始演示</button>
+
+  <div class="category-section">
+    <h3>当前分类方案</h3>
+    <div id="category-display"></div>
+  </div>
+
+  <div class="legend">
+    <div class="legend-item"><span class="legend-dot" style="background:#34C759"></span> 精确匹配</div>
+    <div class="legend-item"><span class="legend-dot" style="background:#007AFF"></span> 同义词匹配</div>
+    <div class="legend-item"><span class="legend-dot" style="background:#FF3B30"></span> 未匹配</div>
+    <div class="legend-item"><span class="legend-dot" style="background:#FF9500"></span> AI识别 / 新增</div>
+  </div>
+</div>
+
+<!-- ==================== Phone ==================== -->
+<div class="phone">
+  <div class="phone-notch"></div>
+  <div class="phone-screen">
+
+    <!-- Status Bar (shared) -->
+    <div class="status-bar">
+      <span>9:41</span>
+      <span style="font-size:11px">5G &nbsp;&#9679;&#9679;&#9679;</span>
+    </div>
+
+    <!-- ===== Screen: Welcome ===== -->
+    <div class="screen active" id="screen-welcome">
+      <div class="welcome-content">
+        <div class="welcome-icon">&#128203;</div>
+        <div class="welcome-title">账单导入分类识别</div>
+        <div class="welcome-desc">交互原型演示<br>在左侧控制台选择场景后<br>点击「开始演示」</div>
+      </div>
+      <div class="welcome-hint">完整演示匹配逻辑与弹窗交互流程</div>
+    </div>
+
+    <!-- ===== Screen: Import ===== -->
+    <div class="screen" id="screen-import">
+      <div class="nav-bar">
+        <button class="nav-back" onclick="goBack('screen-welcome')">&#8249; 返回</button>
+        <span class="nav-title">导入账单</span>
+      </div>
+      <div class="screen-body">
+        <div class="import-section">
+          <div class="import-section-title">已选择文件</div>
+          <div class="file-card">
+            <div class="file-icon">CSV</div>
+            <div class="file-info">
+              <div class="file-name" id="file-name">支付宝账单_202403.csv</div>
+              <div class="file-size" id="file-size">10笔账单 · 12.3KB</div>
+            </div>
+            <div class="file-check">&#10003;</div>
+          </div>
+        </div>
+        <div class="import-section">
+          <div class="import-section-title">账单信息</div>
+          <div class="info-row">
+            <span class="info-label">账单来源</span>
+            <span class="info-value" id="info-source">支付宝</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">账单笔数</span>
+            <span class="info-value" id="info-count">10 笔</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">分类信息</span>
+            <span class="info-value" id="info-has-cat">有分类</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">目标账本</span>
+            <span class="info-value" id="info-book">总账本</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">用户状态</span>
+            <span class="info-value" id="info-scenario">新用户</span>
+          </div>
+        </div>
+      </div>
+      <button class="btn-bottom" onclick="startMatching()">开始导入</button>
+    </div>
+
+    <!-- ===== Screen: Matching ===== -->
+    <div class="screen" id="screen-matching">
+      <div class="nav-bar">
+        <span class="nav-title">解析账单</span>
+      </div>
+      <div class="screen-body">
+        <div class="progress-section">
+          <div class="progress-title" id="progress-title">正在解析...</div>
+          <div class="progress-bar-bg"><div class="progress-bar-fill" id="progress-fill"></div></div>
+          <div class="progress-text" id="progress-text">0%</div>
+        </div>
+        <div class="match-log" id="match-log-section" style="display:none">
+          <div class="match-log-title">
+            分类匹配结果
+            <span class="match-stats" id="match-stats"></span>
+          </div>
+          <div id="match-log-list"></div>
+        </div>
+        <div class="match-summary" id="match-summary"></div>
+      </div>
+    </div>
+
+    <!-- ===== Screen: Preview ===== -->
+    <div class="screen" id="screen-preview">
+      <div class="nav-bar">
+        <button class="nav-back" onclick="goBack('screen-import')">&#8249; 返回</button>
+        <span class="nav-title">预览</span>
+      </div>
+      <div class="screen-body">
+        <div class="preview-summary" id="preview-summary"></div>
+        <div id="preview-bills"></div>
+      </div>
+      <button class="btn-bottom" onclick="confirmImport()" id="btn-confirm-import">确认导入</button>
+    </div>
+
+    <!-- ===== Modal: Strategy ===== -->
+    <div class="modal-overlay" id="modal-strategy">
+      <div class="modal-sheet">
+        <div class="modal-handle"></div>
+        <div class="modal-title" id="modal-strategy-title">发现新分类</div>
+        <div class="modal-subtitle" id="modal-strategy-subtitle"></div>
+        <div id="modal-strategy-options"></div>
+        <button class="modal-btn primary" onclick="onStrategyConfirm()">确认</button>
+      </div>
+    </div>
+
+    <!-- ===== Modal: Confirm Replace ===== -->
+    <div class="modal-overlay center" id="modal-confirm">
+      <div class="confirm-dialog">
+        <div class="confirm-title">确认完全替换分类吗？</div>
+        <div class="confirm-desc" id="confirm-desc"></div>
+        <div class="confirm-buttons">
+          <button class="modal-btn secondary" onclick="hideModal('modal-confirm')">取消</button>
+          <button class="modal-btn danger" onclick="onReplaceConfirm()">确认</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== Modal: Import Done ===== -->
+    <div class="modal-overlay center" id="modal-done">
+      <div class="confirm-dialog">
+        <div style="font-size:48px;margin-bottom:12px">&#10003;</div>
+        <div class="confirm-title">导入成功</div>
+        <div class="confirm-desc" id="done-desc"></div>
+        <div class="confirm-buttons">
+          <button class="modal-btn primary" onclick="hideModal('modal-done')">完成</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+
+  </div><!-- phone-screen -->
+  <div class="phone-home"></div>
+</div><!-- phone -->
+
+
+<script>
+// ======================== DATA ========================
+
+const DEFAULT_CATEGORIES = {
+  支出: [
+    { name: '餐饮', children: ['咖啡', '外卖', '早午餐', '水果零食'] },
+    { name: '购物', children: ['日用品', '服饰'] },
+    { name: '交通', children: ['公交地铁', '打车', '共享单车'] },
+    { name: '娱乐', children: ['电影', '游戏'] },
+    { name: '居住', children: ['房租', '水电煤'] },
+    { name: '通讯', children: [] },
+    { name: '医疗', children: [] },
+    { name: '人情', children: ['红包', '礼物'] },
+    { name: '其他支出', children: [] },
+  ],
+  收入: [
+    { name: '工资', children: [] },
+    { name: '奖金', children: [] },
+    { name: '理财收入', children: [] },
+    { name: '其他收入', children: [] },
+  ]
+};
+
+// 支付宝分类同义词库
+const SYNONYM_MAP = {
+  '餐饮美食': '餐饮',
+  '交通出行': '交通',
+  '日用百货': '日用品',
+  '文化休闲': '娱乐',
+  '充值缴费': '通讯',
+  '生活服务': '居住',
+  '服饰装扮': '服饰',
+  '医疗保健': '医疗',
+};
+
+// 示例账单 - 部分不匹配
+const BILLS_PARTIAL = [
+  { date: '03-01', desc: '星巴克', amount: -35.00, category: '咖啡', direction: '支出' },
+  { date: '03-02', desc: '美团外卖', amount: -28.50, category: '外卖', direction: '支出' },
+  { date: '03-04', desc: '淘宝购物', amount: -199.00, category: '购物', direction: '支出' },
+  { date: '03-05', desc: '滴滴出行', amount: -15.00, category: '交通出行', direction: '支出' },
+  { date: '03-07', desc: '全家便利店', amount: -25.00, category: '餐饮美食', direction: '支出' },
+  { date: '03-08', desc: '猫眼电影', amount: -60.00, category: '娱乐', direction: '支出' },
+  { date: '03-10', desc: '京东商城', amount: -89.00, category: '数码', direction: '支出' },
+  { date: '03-12', desc: '宠物医院', amount: -200.00, category: '宠物', direction: '支出' },
+  { date: '03-14', desc: '婚礼红包', amount: -1000.00, category: '结婚', direction: '支出' },
+  { date: '03-15', desc: '公司发薪', amount: 15000.00, category: '工资', direction: '收入' },
+];
+
+// 示例账单 - 全部匹配
+const BILLS_ALL_MATCH = [
+  { date: '03-01', desc: '星巴克', amount: -35.00, category: '咖啡', direction: '支出' },
+  { date: '03-02', desc: '美团外卖', amount: -28.50, category: '外卖', direction: '支出' },
+  { date: '03-04', desc: '淘宝购物', amount: -199.00, category: '购物', direction: '支出' },
+  { date: '03-05', desc: '滴滴出行', amount: -15.00, category: '交通出行', direction: '支出' },
+  { date: '03-07', desc: '全家便利店', amount: -25.00, category: '餐饮美食', direction: '支出' },
+  { date: '03-08', desc: '猫眼电影', amount: -60.00, category: '娱乐', direction: '支出' },
+  { date: '03-09', desc: '屈臣氏', amount: -58.00, category: '日用品', direction: '支出' },
+  { date: '03-10', desc: '优衣库', amount: -299.00, category: '服饰', direction: '支出' },
+  { date: '03-12', desc: '房东转账', amount: -3000.00, category: '房租', direction: '支出' },
+  { date: '03-15', desc: '公司发薪', amount: 15000.00, category: '工资', direction: '收入' },
+];
+
+// 示例账单 - 无分类
+const BILLS_NO_CAT = [
+  { date: '03-01', desc: '星巴克', amount: -35.00, category: null, direction: '支出' },
+  { date: '03-02', desc: '美团外卖', amount: -28.50, category: null, direction: '支出' },
+  { date: '03-04', desc: '淘宝购物', amount: -199.00, category: null, direction: '支出' },
+  { date: '03-05', desc: '滴滴出行', amount: -15.00, category: null, direction: '支出' },
+  { date: '03-07', desc: '全家便利店', amount: -25.00, category: null, direction: '支出' },
+  { date: '03-08', desc: '猫眼电影', amount: -60.00, category: null, direction: '支出' },
+  { date: '03-09', desc: '屈臣氏', amount: -58.00, category: null, direction: '支出' },
+  { date: '03-10', desc: '京东商城', amount: -89.00, category: null, direction: '支出' },
+  { date: '03-12', desc: '宠物医院', amount: -200.00, category: null, direction: '支出' },
+  { date: '03-15', desc: '公司发薪', amount: 15000.00, category: null, direction: '收入' },
+];
+
+// 家教账本分类方案（用于预览页重匹配演示）
+const ALT_CATEGORIES = {
+  支出: [
+    { name: '教材', children: [] },
+    { name: '交通', children: ['打车', '公交'] },
+    { name: '文具', children: [] },
+    { name: '其他支出', children: [] },
+  ],
+  收入: [
+    { name: '课时费', children: [] },
+    { name: '其他收入', children: [] },
+  ]
+};
+
+// ======================== STATE ========================
+
+let state = {
+  scenario: 'new',
+  billType: 'partialMatch',
+  bills: [],
+  categories: null,
+  matchResults: [],
+  unmatchedCategories: [],
+  selectedStrategy: 'ai',
+  userChoice: null,
+};
+
+// ======================== MATCHING ENGINE ========================
+
+function deepClone(obj) {
+  return JSON.parse(JSON.stringify(obj));
+}
+
+function getCategories() {
+  return deepClone(DEFAULT_CATEGORIES);
+}
+
+function findInScheme(catName, direction, scheme) {
+  const dirCats = scheme[direction] || [];
+  // Check L1
+  for (const l1 of dirCats) {
+    if (l1.name === catName) return { level: 1, l1: l1.name, l2: null };
+    // Check L2
+    for (const l2Name of l1.children) {
+      if (l2Name === catName) return { level: 2, l1: l1.name, l2: l2Name };
+    }
+  }
+  return null;
+}
+
+function synonymLookup(catName) {
+  return SYNONYM_MAP[catName] || null;
+}
+
+function matchSingleBill(bill, scheme) {
+  if (!bill.category) return { bill, matchType: 'none', target: null };
+
+  // Step 1: Exact match
+  const exact = findInScheme(bill.category, bill.direction, scheme);
+  if (exact) {
+    const targetName = exact.l2 ? `${exact.l1}-${exact.l2}` : exact.l1;
+    return { bill, matchType: 'exact', target: targetName };
+  }
+
+  // Step 2: Synonym match
+  const mapped = synonymLookup(bill.category);
+  if (mapped) {
+    const synMatch = findInScheme(mapped, bill.direction, scheme);
+    if (synMatch) {
+      const targetName = synMatch.l2 ? `${synMatch.l1}-${synMatch.l2}` : synMatch.l1;
+      return { bill, matchType: 'synonym', target: targetName, synonym: mapped };
+    }
+  }
+
+  return { bill, matchType: 'fail', target: null };
+}
+
+function runFullMatching(bills, scheme) {
+  return bills.map(b => matchSingleBill(b, scheme));
+}
+
+// ======================== UI HELPERS ========================
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function showModal(id) {
+  document.getElementById(id).classList.add('active');
+}
+
+function hideModal(id) {
+  document.getElementById(id).classList.remove('active');
+}
+
+function showToast(msg, duration = 2500) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), duration);
+}
+
+function goBack(target) {
+  showScreen(target);
+  if (target === 'screen-welcome') resetState();
+}
+
+function resetState() {
+  state = {
+    scenario: 'new',
+    billType: 'partialMatch',
+    bills: [],
+    categories: null,
+    matchResults: [],
+    unmatchedCategories: [],
+    selectedStrategy: 'ai',
+    userChoice: null,
+  };
+  document.getElementById('match-log-list').innerHTML = '';
+  document.getElementById('progress-fill').style.width = '0%';
+  document.getElementById('progress-text').textContent = '0%';
+  hideModal('modal-strategy');
+  hideModal('modal-confirm');
+  hideModal('modal-done');
+}
+
+// ======================== RENDER CATEGORIES ========================
+
+function renderCategories(categories, container, removedCats, addedCats) {
+  container = container || document.getElementById('category-display');
+  removedCats = removedCats || [];
+  addedCats = addedCats || [];
+  let html = '';
+  for (const dir of ['支出', '收入']) {
+    html += `<div class="cat-direction">${dir}</div><div class="cat-list">`;
+    for (const cat of (categories[dir] || [])) {
+      const isRemoved = removedCats.includes(cat.name);
+      const isNew = addedCats.includes(cat.name);
+      const cls = isRemoved ? 'cat-item cat-removed' : isNew ? 'cat-item cat-new' : 'cat-item';
+      const icon = cat.name.charAt(0);
+      const childrenStr = cat.children.length > 0 ? `<span class="cat-children"> (${cat.children.join(', ')})</span>` : '';
+      html += `<div class="${cls}"><span class="cat-icon">${icon}</span>${cat.name}${childrenStr}</div>`;
+    }
+    html += '</div>';
+  }
+  container.innerHTML = html;
+}
+
+// ======================== FLOW: START DEMO ========================
+
+function startDemo() {
+  state.scenario = document.getElementById('sel-scenario').value;
+  state.billType = document.getElementById('sel-bill-type').value;
+  state.categories = getCategories();
+
+  renderCategories(state.categories);
+
+  // Set bills
+  if (state.billType === 'noCategory') state.bills = deepClone(BILLS_NO_CAT);
+  else if (state.billType === 'allMatch') state.bills = deepClone(BILLS_ALL_MATCH);
+  else state.bills = deepClone(BILLS_PARTIAL);
+
+  // Update import screen info
+  const hasCat = state.billType !== 'noCategory';
+  document.getElementById('info-has-cat').textContent = hasCat ? '有分类' : '无分类';
+  document.getElementById('info-count').textContent = state.bills.length + ' 笔';
+  document.getElementById('info-scenario').textContent = state.scenario === 'new' ? '新用户（情况一）' : '老用户（情况二）';
+  document.getElementById('info-source').textContent = hasCat ? '支付宝' : '微信';
+  document.getElementById('file-name').textContent = hasCat ? '支付宝账单_202403.csv' : '微信支付账单_202403.csv';
+  document.getElementById('file-size').textContent = `${state.bills.length}笔账单 · ${(Math.random() * 20 + 5).toFixed(1)}KB`;
+
+  showScreen('screen-import');
+}
+
+// ======================== FLOW: MATCHING ========================
+
+async function startMatching() {
+  showScreen('screen-matching');
+
+  const progressFill = document.getElementById('progress-fill');
+  const progressText = document.getElementById('progress-text');
+  const progressTitle = document.getElementById('progress-title');
+  const logSection = document.getElementById('match-log-section');
+  const logList = document.getElementById('match-log-list');
+  const summaryDiv = document.getElementById('match-summary');
+
+  logList.innerHTML = '';
+  summaryDiv.style.display = 'none';
+  summaryDiv.innerHTML = '';
+
+  const hasCat = state.billType !== 'noCategory';
+
+  if (!hasCat) {
+    // No category info → direct AI parsing
+    logSection.style.display = 'none';
+    progressTitle.textContent = '正在AI识别分类...';
+    for (let i = 0; i <= 100; i += 2) {
+      progressFill.style.width = i + '%';
+      progressText.textContent = i + '%';
+      await sleep(40);
+    }
+    progressTitle.textContent = '解析完成';
+    // Assign AI categories
+    const aiCats = ['餐饮', '餐饮', '购物', '交通', '餐饮', '娱乐', '日用品', '购物', '医疗', '工资'];
+    state.bills.forEach((b, i) => { b.finalCategory = aiCats[i] || '其他支出'; b.matchType = 'ai'; });
+    await sleep(500);
+    showPreview();
+    return;
+  }
+
+  // Has category → run matching (不显示账单详情，只显示进度)
+  logSection.style.display = 'none';
+  progressTitle.textContent = '正在分析账单分类...';
+
+  // 后台执行匹配
+  state.matchResults = runFullMatching(state.bills, state.categories);
+
+  // 只显示进度条动画
+  for (let i = 0; i <= 100; i += 3) {
+    progressFill.style.width = Math.min(i, 100) + '%';
+    progressText.textContent = Math.min(i, 100) + '%';
+    await sleep(25);
+  }
+  progressFill.style.width = '100%';
+  progressText.textContent = '100%';
+  progressTitle.textContent = '分析完成';
+
+  // 计算匹配结果
+  const exactCount = state.matchResults.filter(r => r.matchType === 'exact').length;
+  const synCount = state.matchResults.filter(r => r.matchType === 'synonym').length;
+  const failCount = state.matchResults.filter(r => r.matchType === 'fail').length;
+  state.unmatchedCategories = [...new Set(state.matchResults.filter(r => r.matchType === 'fail').map(r => r.bill.category))];
+
+  // 显示匹配摘要
+  summaryDiv.style.display = 'block';
+  summaryDiv.innerHTML = `
+    <div class="summary-row"><span class="summary-label">精确匹配</span><span class="summary-value success">${exactCount} 笔</span></div>
+    <div class="summary-row"><span class="summary-label">同义词匹配</span><span class="summary-value success">${synCount} 笔</span></div>
+    <div class="summary-row"><span class="summary-label">未匹配</span><span class="summary-value ${failCount > 0 ? 'fail' : 'success'}">${failCount} 笔${failCount > 0 ? '（' + state.unmatchedCategories.length + '个分类）' : ''}</span></div>
+  `;
+
+  await sleep(500);
+
+  if (failCount === 0) {
+    // 全部匹配 → 静默归类，直接进预览
+    showToast('全部匹配成功，直接归类');
+    state.matchResults.forEach(r => {
+      r.bill.finalCategory = r.target;
+      r.bill.matchType = r.matchType;
+    });
+    await sleep(1000);
+    showPreview();
+  } else {
+    // 有未匹配 → 先出弹窗，用户选完再进预览
+    showStrategyModal();
+  }
+}
+
+// ======================== FLOW: STRATEGY MODAL ========================
+
+function showStrategyModal() {
+  const catList = state.unmatchedCategories.join('、');
+  const count = state.unmatchedCategories.length;
+
+  document.getElementById('modal-strategy-title').textContent = `导入的账单包含 ${count} 个新分类`;
+  document.getElementById('modal-strategy-subtitle').textContent = `以下分类在你的分类方案中不存在：${catList}，请选择处理方式`;
+
+  let optionsHtml = '';
+
+  // Option 1: AI识别 (always available, default selected)
+  optionsHtml += makeRadioCard('ai', '使用已有分类智能识别', '能匹配的账单直接归类，不能匹配的账单由AI根据交易信息重新识别归类', true);
+
+  // Option 2: 新增 (always available)
+  optionsHtml += makeRadioCard('add', '将账单分类增加到现有分类列表中', `将"${catList}"等新增到你的分类方案中，账单随之归属`, false);
+
+  // Option 3: 替换 (only 情况一)
+  if (state.scenario === 'new') {
+    optionsHtml += makeRadioCard('replace', '用账单分类完全替换已有分类', '移除现有分类，完全替换为账单中的分类体系', false);
+  }
+
+  document.getElementById('modal-strategy-options').innerHTML = optionsHtml;
+  state.selectedStrategy = 'ai';
+
+  showModal('modal-strategy');
+}
+
+function makeRadioCard(value, label, desc, selected) {
+  return `
+    <div class="radio-card ${selected ? 'selected' : ''}" onclick="selectStrategy('${value}')">
+      <div class="radio-dot"></div>
+      <div>
+        <div class="radio-label">${label}</div>
+        <div class="radio-desc">${desc}</div>
+      </div>
+    </div>
+  `;
+}
+
+function selectStrategy(value) {
+  state.selectedStrategy = value;
+  document.querySelectorAll('#modal-strategy-options .radio-card').forEach(card => {
+    card.classList.remove('selected');
+  });
+  event.currentTarget.classList.add('selected');
+}
+
+function onStrategyConfirm() {
+  if (state.selectedStrategy === 'replace') {
+    // Show secondary confirm
+    const existingCount = state.categories['支出'].length + state.categories['收入'].length;
+    const allBillCats = [...new Set(state.bills.map(b => b.category).filter(Boolean))];
+    document.getElementById('confirm-desc').textContent =
+      `当前的${existingCount}个分类将会被完全移除，新增账单中的${allBillCats.length}个分类，此操作不可撤销`;
+    showModal('modal-confirm');
+    return;
+  }
+
+  state.userChoice = state.selectedStrategy;
+  hideModal('modal-strategy');
+  applyStrategy();
+}
+
+function onReplaceConfirm() {
+  state.userChoice = 'replace';
+  hideModal('modal-confirm');
+  hideModal('modal-strategy');
+  applyStrategy();
+}
+
+// ======================== FLOW: APPLY STRATEGY ========================
+
+function applyStrategy() {
+  const choice = state.userChoice;
+
+  if (choice === 'ai') {
+    // Matched bills → use matched category; Unmatched → AI assigns existing category
+    const aiAssign = { '数码': '购物', '宠物': '医疗', '结婚': '人情' };
+    state.matchResults.forEach(r => {
+      if (r.matchType === 'fail') {
+        r.bill.finalCategory = aiAssign[r.bill.category] || '其他支出';
+        r.bill.matchType = 'ai';
+      } else {
+        r.bill.finalCategory = r.target;
+        r.bill.matchType = r.matchType;
+      }
+    });
+    showPreview();
+
+  } else if (choice === 'add') {
+    // Matched → use match; Unmatched → add new categories
+    const addedCats = [];
+    state.matchResults.forEach(r => {
+      if (r.matchType === 'fail') {
+        // Add category to scheme
+        const dir = r.bill.direction;
+        const existing = state.categories[dir].find(c => c.name === r.bill.category);
+        if (!existing) {
+          state.categories[dir].push({ name: r.bill.category, children: [] });
+          addedCats.push(r.bill.category);
+        }
+        r.bill.finalCategory = r.bill.category;
+        r.bill.matchType = 'added';
+      } else {
+        r.bill.finalCategory = r.target;
+        r.bill.matchType = r.matchType;
+      }
+    });
+    renderCategories(state.categories, null, [], addedCats);
+    showToast(`导入成功，新增分类${addedCats.length}个`);
+    showPreview();
+
+  } else if (choice === 'replace') {
+    // Determine directions in bill
+    const billDirs = new Set(state.bills.filter(b => b.category).map(b => b.direction));
+    const removedCats = [];
+    const allBillCategories = [...new Set(state.bills.filter(b => b.category).map(b => b.category))];
+
+    for (const dir of billDirs) {
+      // Remove all existing categories in this direction (except 其他)
+      const kept = state.categories[dir].filter(c => c.name === `其他${dir}`);
+      const removed = state.categories[dir].filter(c => c.name !== `其他${dir}`);
+      removed.forEach(c => removedCats.push(c.name));
+
+      // Add bill categories for this direction
+      const dirBillCats = [...new Set(state.bills.filter(b => b.category && b.direction === dir).map(b => b.category))];
+      const newCats = dirBillCats.map(name => ({ name, children: [] }));
+
+      state.categories[dir] = [...newCats, ...kept];
+    }
+
+    state.matchResults.forEach(r => {
+      r.bill.finalCategory = r.bill.category || '其他支出';
+      r.bill.matchType = r.matchType === 'fail' ? 'added' : r.matchType;
+    });
+
+    renderCategories(state.categories, null, removedCats, allBillCategories);
+    showToast('已完全替换分类');
+    showPreview();
+  }
+}
+
+// ======================== FLOW: PREVIEW ========================
+
+function showPreview() {
+  const bills = state.bills;
+
+  // Summary tags
+  const exactC = bills.filter(b => b.matchType === 'exact').length;
+  const synC = bills.filter(b => b.matchType === 'synonym').length;
+  const aiC = bills.filter(b => b.matchType === 'ai').length;
+  const addedC = bills.filter(b => b.matchType === 'added').length;
+
+  let tagsHtml = `<span class="preview-tag blue">共 ${bills.length} 笔</span>`;
+  if (exactC > 0) tagsHtml += `<span class="preview-tag green">精确匹配 ${exactC}</span>`;
+  if (synC > 0) tagsHtml += `<span class="preview-tag green">同义词 ${synC}</span>`;
+  if (aiC > 0) tagsHtml += `<span class="preview-tag orange">AI识别 ${aiC}</span>`;
+  if (addedC > 0) tagsHtml += `<span class="preview-tag orange">新增分类 ${addedC}</span>`;
+
+  document.getElementById('preview-summary').innerHTML = `
+    <div class="preview-summary-title">导入预览</div>
+    <div class="preview-tags">${tagsHtml}</div>
+  `;
+
+  // Bill list
+  let billsHtml = '';
+  for (let i = 0; i < bills.length; i++) {
+    const b = bills[i];
+    const isIncome = b.direction === '收入';
+    const iconCls = isIncome ? 'income' : 'expense';
+    const amtCls = isIncome ? 'income' : 'expense';
+    const amtStr = isIncome ? `+${b.amount.toFixed(2)}` : b.amount.toFixed(2);
+    const icon = (b.finalCategory || '?').charAt(0);
+
+    let matchBadge = '';
+    if (b.matchType === 'exact') matchBadge = '<span class="match-badge exact" style="font-size:10px">精确</span>';
+    else if (b.matchType === 'synonym') matchBadge = '<span class="match-badge synonym" style="font-size:10px">同义</span>';
+    else if (b.matchType === 'ai') matchBadge = '<span class="match-badge ai" style="font-size:10px">AI</span>';
+    else if (b.matchType === 'added') matchBadge = '<span class="match-badge added" style="font-size:10px">新增</span>';
+
+    // Account book selector (情况二才展示切换，用于重匹配演示)
+    const bookOptions = state.scenario === 'existing'
+      ? `<select class="book-select" onchange="onBookChange(${i}, this.value)"><option value="main" selected>总账本</option><option value="alt">家教账本</option></select>`
+      : '<span style="font-size:11px;color:var(--text3)">总账本</span>';
+    // 记录初始账本
+    b.currentBook = 'main';
+
+    billsHtml += `
+      <div class="bill-card" id="bill-card-${i}">
+        <div class="bill-item">
+          <div class="bill-cat-icon ${iconCls}">${icon}</div>
+          <div class="bill-info">
+            <div class="bill-desc">${b.desc}</div>
+            <div class="bill-meta">${b.date} · ${b.finalCategory || '未分类'} ${matchBadge} · ${bookOptions}</div>
+          </div>
+          <div class="bill-amount ${amtCls}">${amtStr}</div>
+        </div>
+      </div>
+    `;
+  }
+  document.getElementById('preview-bills').innerHTML = billsHtml;
+
+  showScreen('screen-preview');
+}
+
+// ======================== PREVIEW: RE-MATCHING ========================
+
+function onBookChange(billIndex, newBook) {
+  const bill = state.bills[billIndex];
+  const card = document.getElementById(`bill-card-${billIndex}`);
+
+  // 记住旧状态
+  const oldCategory = bill.finalCategory;
+  const oldMatchType = bill.matchType;
+
+  // 清除已有提示条
+  const existingBar = card.querySelector('.bill-rematch-bar');
+  if (existingBar) existingBar.remove();
+  card.classList.remove('flash');
+
+  if (newBook === 'main') {
+    // 切回总账本 → 还原原始匹配
+    const origResult = state.matchResults.find(mr => mr.bill === bill);
+    if (origResult) {
+      bill.finalCategory = origResult.bill.finalCategory;
+      bill.matchType = origResult.bill.matchType;
+    } else {
+      const r = matchSingleBill(bill, state.categories);
+      if (r.matchType !== 'fail') {
+        bill.finalCategory = r.target;
+        bill.matchType = r.matchType;
+      }
+    }
+    updateBillCard(billIndex, bill, 'main');
+    if (bill.finalCategory !== oldCategory) {
+      void card.offsetWidth;
+      card.classList.add('flash');
+      addRematchBar(card, '✓ 已恢复', oldCategory, bill.finalCategory, '切回总账本');
+    }
+    return;
+  }
+
+  // 切到家教账本 → 重匹配
+  const r = matchSingleBill(bill, ALT_CATEGORIES);
+  if (r.matchType !== 'fail') {
+    // 匹配成功 → 静默更新
+    bill.finalCategory = r.target;
+    bill.matchType = r.matchType;
+    updateBillCard(billIndex, bill, 'alt');
+    void card.offsetWidth;
+    card.classList.add('flash');
+    addRematchBar(card, '✓ 自动匹配成功', oldCategory, bill.finalCategory, '精确/同义词匹配');
+    showToast(`已自动匹配到：${r.target}`);
+  } else {
+    // 匹配失败 → 按用户之前选择的策略处理
+    if (state.userChoice === 'ai' || state.userChoice === null) {
+      bill.finalCategory = '其他支出';
+      bill.matchType = 'ai';
+      updateBillCard(billIndex, bill, 'alt');
+      void card.offsetWidth;
+      card.classList.add('flash');
+      addRematchBar(card, `⚠ "${bill.category}"在家教账本不存在`, oldCategory, bill.finalCategory, 'AI重新归类');
+    } else {
+      bill.finalCategory = bill.category;
+      bill.matchType = 'added';
+      updateBillCard(billIndex, bill, 'alt');
+      void card.offsetWidth;
+      card.classList.add('flash');
+      addRematchBar(card, `⚠ "${bill.category}"在家教账本不存在`, oldCategory, bill.finalCategory, '新增到家教方案');
+    }
+  }
+}
+
+function addRematchBar(card, title, oldCat, newCat, reason) {
+  const bar = document.createElement('div');
+  bar.className = 'bill-rematch-bar';
+  bar.innerHTML = `
+    <div>
+      <div style="margin-bottom:3px;font-weight:500">${title}</div>
+      <span class="rematch-change">
+        <span class="rematch-old">${oldCat}</span>
+        <span class="rematch-arrow">→</span>
+        <span class="rematch-new">${newCat}</span>
+        <span style="color:var(--text3);margin-left:4px">(${reason})</span>
+      </span>
+    </div>
+  `;
+  card.appendChild(bar);
+}
+
+function updateBillCard(index, bill, bookValue) {
+  const card = document.getElementById(`bill-card-${index}`);
+  const icon = (bill.finalCategory || '?').charAt(0);
+  const iconEl = card.querySelector('.bill-cat-icon');
+  iconEl.textContent = icon;
+
+  let matchBadge = '';
+  if (bill.matchType === 'exact') matchBadge = '<span class="match-badge exact" style="font-size:10px">精确</span>';
+  else if (bill.matchType === 'synonym') matchBadge = '<span class="match-badge synonym" style="font-size:10px">同义</span>';
+  else if (bill.matchType === 'ai') matchBadge = '<span class="match-badge ai" style="font-size:10px">AI</span>';
+  else if (bill.matchType === 'added') matchBadge = '<span class="match-badge added" style="font-size:10px">新增</span>';
+
+  const meta = card.querySelector('.bill-meta');
+  // 重建 select 并保持正确的选中值
+  if (state.scenario === 'existing') {
+    const mainSel = bookValue === 'main' ? 'selected' : '';
+    const altSel = bookValue === 'alt' ? 'selected' : '';
+    meta.innerHTML = `${bill.date} · ${bill.finalCategory || '未分类'} ${matchBadge} · <select class="book-select" onchange="onBookChange(${index}, this.value)"><option value="main" ${mainSel}>总账本</option><option value="alt" ${altSel}>家教账本</option></select>`;
+  } else {
+    meta.innerHTML = `${bill.date} · ${bill.finalCategory || '未分类'} ${matchBadge} · <span style="font-size:11px;color:var(--text3)">总账本</span>`;
+  }
+}
+
+// ======================== FLOW: CONFIRM IMPORT ========================
+
+function confirmImport() {
+  const addedCount = state.bills.filter(b => b.matchType === 'added').length;
+  const aiCount = state.bills.filter(b => b.matchType === 'ai').length;
+
+  let desc = `共导入 ${state.bills.length} 笔账单`;
+  if (addedCount > 0) desc += `，新增 ${state.unmatchedCategories.length} 个分类`;
+  if (aiCount > 0) desc += `，${aiCount} 笔由AI重新归类`;
+
+  document.getElementById('done-desc').textContent = desc;
+  showModal('modal-done');
+}
+
+// ======================== UTILS ========================
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ======================== INIT ========================
+
+renderCategories(getCategories());
+</script>
+
+</body>
+</html>
